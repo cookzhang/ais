@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+
+         http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd">
+
+    <bean id="propertyConfigurerRedis" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="order" value="1"/>
+        <property name="ignoreUnresolvablePlaceholders" value="true"/>
+        <property name="locations">
+            <list>
+                <value>classpath:cache.properties</value>
+                <value>classpath:ais.properties</value>
+                <value>classpath:gearman.properties</value>
+                <value>classpath:queue.properties</value>
+                <value>classpath:jdbc.properties</value>
+            </list>
+        </property>
+    </bean>
+
+    <!-- jedis pool配置 -->
+    <bean id="jedisPoolConfig" class="redis.clients.jedis.JedisPoolConfig">
+        <property name="maxIdle" value="${redis.maxIdle}"/>
+        <property name="maxWaitMillis" value="${redis.maxWaitMillis}"/>
+        <property name="testOnBorrow" value="${redis.testOnBorrow}"/>
+    </bean>
+
+    <bean id="cacheManager" class="org.springframework.cache.ehcache.EhCacheManagerFactoryBean">
+        <property name="configLocation" value="classpath:ehcache.xml"/>
+    </bean>
+
+    <bean id="marshaller" class="com.github.cookzhang.ais.cache.ehcache.SpringEhcacheMarshaller">
+        <property name="cacheManager" ref="cacheManager"/>
+    </bean>
+
+
+    <!-- spring data redis -->
+    <bean id="jedisConnectionFactory" class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory">
+        <property name="usePool" value="true"/>
+        <property name="hostName" value="${redis.host}"/>
+        <property name="port" value="${redis.port}"/>
+        <property name="timeout" value="${redis.timeout}"/>
+        <property name="database" value="${redis.default.db}"/>
+        <constructor-arg index="0" ref="jedisPoolConfig"/>
+    </bean>
+
+    <bean id="redisTemplate" class="org.springframework.data.redis.core.StringRedisTemplate">
+        <property name="connectionFactory" ref="jedisConnectionFactory"/>
+    </bean>
+    <!--默认使用ehcache-->
+    <!--
+    <bean id="marshaller" class="SpringRedisMarshaller">
+        <property name="redisTemplate" ref="redisTemplate"/>
+    </bean>
+    -->
+
+    <!--rabbitmq consumer-->
+    <!-- RabbitMQ 消息队列 连接服务配置-->
+    <!--
+    <rabbit:connection-factory id="connectionFactory" host="${rabbitmq.host}" username="${rabbitmq.username}"
+                               password="${rabbitmq.password}" port="${rabbitmq.port}"/>
+    <rabbit:template id="rabbitTemplate" connection-factory="connectionFactory" exchange="myExchange"
+                     routing-key="routing-key"/>
+    <rabbit:admin connection-factory="connectionFactory"/>
+
+    <rabbit:queue durable="false" auto-delete="true" exclusive="false"
+                  name="${rabbitmq.queue.name}"/>
+
+    <rabbit:listener-container connection-factory="connectionFactory" acknowledge="auto">
+        <rabbit:listener queues="${rabbitmq.queue.name}" ref="messageConsumer" method="onMessage"/>
+    </rabbit:listener-container>
+
+    <bean id="messageConsumer" class="SpringRabbitConsumer">
+        <property name="messageHandler" ref="messageHandler"/>
+    </bean>
+
+    <bean id="messageProducer" class="SpringRabbitProducer">
+        <property name="rabbitTemplate" ref="rabbitTemplate"/>
+    </bean>
+    -->
+    <!--RabbitMQ 消息列表处理服务配置结束-->
+
+
+    <!--公共的消息处理类-->
+    <bean id="messageHandler" class="com.github.cookzhang.ais.queue.DefaultMessageHandler">
+        <property name="marshaller" ref="marshaller"/>
+        <property name="invokerRegistry" ref="invokerRegistry"/>
+    </bean>
+
+    <!-- 双循环缓冲队列实现方式处理消息 配置开始 -->
+    <bean id="circularQueue" class="com.github.cookzhang.ais.queue.circle.CircularQueue"/>
+
+    <bean id="messageConsumer" class="com.github.cookzhang.ais.queue.circle.CircularConsumer" init-method="start">
+        <property name="messageHandler" ref="messageHandler"/>
+    </bean>
+
+    <bean id="messageProducer" class="com.github.cookzhang.ais.queue.circle.CircularProducer"/>
+    <!-- 双循环缓冲队列实现方式处理消息 配置结束 -->
+
+    <!--数据库配置开始-->
+    <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="driverClassName" value="${db.driverClassName}"/>
+        <property name="url" value="${db.url}"/>
+        <property name="username" value="${db.username}"/>
+        <property name="password" value="${db.password}"/>
+    </bean>
+
+    <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+    <!--数据库配置结束-->
+
+
+    <bean id="invokerRegistry" class="com.github.cookzhang.ais.InvokerRegistry">
+        <property name="invokers" ref="invokers"/>
+    </bean>
+
+    <util:map id="invokers" key-type="com.github.cookzhang.ais.InvokerType">
+        <entry key="HTTP" value-ref="httpInvoker"/>
+        <entry key="DATABASE" value-ref="databaseInvoker"/>
+    </util:map>
+
+    <bean id="httpInvoker" class="com.github.cookzhang.ais.invoker.HttpInvoker"/>
+    <bean id="databaseInvoker" class="com.github.cookzhang.ais.invoker.SpringDatabaseInvoker">
+        <property name="jdbcTemplate" ref="jdbcTemplate"/>
+    </bean>
+
+    <!--
+
+    <bean id="generalFunction" class="GeneralFunction">
+        <constructor-arg name="host" value="${gearman.host}"/>
+        <constructor-arg name="port" value="${gearman.port}"/>
+        <property name="callback" ref="redisMarshaller"/>
+    </bean>
+
+    <bean id="gearmanDispatcher" class="GearmanDispatcher">
+        <constructor-arg name="host" value="${gearman.host}"/>
+        <constructor-arg name="port" value="${gearman.port}"/>
+    </bean>
+
+    <bean id="redisMonitor" class="SpringRabbitMonitor" init-method="start">
+        <constructor-arg name="rabbitTemplate" ref="rabbitTemplate"/>
+        <property name="dispatcher" ref="gearmanDispatcher"/>
+    </bean>
+    -->
+
+    <bean id="predicate" class="com.github.cookzhang.ais.MergePredicate"/>
+</beans>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration status="DEBUG">
+    <appenders>
+        <Console name="consolePrint" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%d]-[%t]-%-5p (%F:%L) |%msg%n" />
+        </Console>
+        <File name="AisAppender" fileName="/var/log/ais/ais.log" filePattern="/var/log/ais/ais.log.d{yyyy-MM-dd}">
+            <PatternLayout pattern="[%d]-[%t]-%-5p (%F:%L) |%msg%n" />
+        </File>
+        <File name="AisErrorAppender" fileName="/var/log/ais/ais-error.log" filePattern="/var/log/ais/ais.log.d{yyyy-MM-dd}">
+            <PatternLayout pattern="[%d]-%-5p (%F:%L)|%m%n" />
+            <Filters>
+                <ThresholdFilter level="error" onMatch="ACCEPT" onMismatch="DENY"/>
+            </Filters>
+        </File>
+        <File name="AisUdp" fileName="/var/log/ais/ais-udp.log" filePattern="/var/log/ais/ais.log.d{yyyy-MM-dd}">
+            <PatternLayout pattern="`%d{yyyy-MM-ddHH:mm:ss}`Ais`%m%n" />
+        </File>
+    <!--<<Socket name="AisUdp" host="192.168.252.44" port="6003">
+
+            <PatternLayout pattern="`%d{yyyy-MM-ddHH:mm:ss}`Ais`%m%n" />
+            <SerializedLayout/>
+        </Socket>>-->
+    </appenders>
+    <loggers>
+
+        <logger name="com.autohome.ais" level="all" additivity="false">
+            <appender-ref ref="consolePrint" />
+            <appender-ref ref="AisAppender" />
+            <appender-ref ref="AisErrorAppender" />
+        </logger>
+        <logger name="com.github.cookzhang.ais.log.AisLog" level="info" additivity="false">
+            <appender-ref ref="AisUdp" />
+        </logger>
+    </loggers>
+</configuration>
